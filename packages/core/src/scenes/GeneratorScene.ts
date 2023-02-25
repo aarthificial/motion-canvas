@@ -267,7 +267,6 @@ export abstract class GeneratorScene<T>
 
   public async reset(previousScene: Scene | null = null) {
     if (this.cache.current.firstFrame !== this.playback.frame) {
-      console.log(this.cache.current.firstFrame, this.playback.frame);
       this.cache.current = {
         ...this.cache.current,
         firstFrame: this.playback.frame,

@@ -91,7 +91,6 @@ export function EditorPreview() {
     ([scale]) => {
       const zoom = (state.zoom * scale) / settings.resolutionScale;
       if (!isNaN(zoom) && zoom > 0) {
-        console.log(zoom);
         setState({...state, zoom});
       }
     },
