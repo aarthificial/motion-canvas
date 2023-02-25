@@ -265,6 +265,11 @@ export interface Scene<T = unknown> {
   isFinished(): boolean;
 
   /**
+   * Enter the {@link SceneState.Initial} state.
+   */
+  enterInitial(): void;
+
+  /**
    * Enter the {@link SceneState.AfterTransitionIn} state.
    */
   enterAfterTransitionIn(): void;

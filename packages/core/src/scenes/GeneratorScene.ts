@@ -266,6 +266,13 @@ export abstract class GeneratorScene<T>
   }
 
   public async reset(previousScene: Scene | null = null) {
+    if (this.cache.current.firstFrame !== this.playback.frame) {
+      console.log(this.cache.current.firstFrame, this.playback.frame);
+      this.cache.current = {
+        ...this.cache.current,
+        firstFrame: this.playback.frame,
+      };
+    }
     this.counters = {};
     this.previousScene = previousScene;
     this.random = new Random(this.meta.seed.get());
@@ -275,11 +282,7 @@ export abstract class GeneratorScene<T>
         this.thread.current = thread;
       },
     );
-    if (this.cache.current.transitionDuration === 0) {
-      this.state = SceneState.AfterTransitionIn;
-    } else {
-      this.state = SceneState.Initial;
-    }
+    this.state = SceneState.AfterTransitionIn;
     this.afterReset.dispatch();
     await this.next();
   }
@@ -301,6 +304,16 @@ export abstract class GeneratorScene<T>
 
   public isFinished(): boolean {
     return this.state === SceneState.Finished;
+  }
+
+  public enterInitial() {
+    if (this.state === SceneState.AfterTransitionIn) {
+      this.state = SceneState.Initial;
+    } else {
+      this.logger.warn(
+        `Scene ${this.name} entered initial in an unexpected state: ${this.state}`,
+      );
+    }
   }
 
   public enterAfterTransitionIn() {
