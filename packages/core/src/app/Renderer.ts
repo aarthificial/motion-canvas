@@ -177,7 +177,7 @@ export class Renderer {
     await this.exporter.start();
 
     let lastRefresh = performance.now();
-    let result: RendererResult;
+    let result = RendererResult.Success;
     try {
       await this.exportFrame(signal);
       if (signal.aborted) {
@@ -199,7 +199,6 @@ export class Renderer {
             finished = true;
           }
         }
-        result = RendererResult.Success;
       }
     } catch (e: any) {
       this.project.logger.error(e);
