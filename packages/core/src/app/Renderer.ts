@@ -16,6 +16,7 @@ export interface RendererSettings extends StageSettings {
   fps: number;
   fileType: CanvasOutputMimeType;
   quality: number;
+  groupByScene: boolean;
 }
 
 export enum RendererState {
@@ -141,15 +142,14 @@ export class Renderer {
       );
 
       if (import.meta.hot) {
-        import.meta.hot!.send('motion-canvas:export', {
-          frame,
-          isStill: true,
+        import.meta.hot.send('motion-canvas:export', {
+          frameNumber: frame,
           data: this.stage.finalBuffer.toDataURL(
             settings.fileType,
             settings.quality,
           ),
           mimeType: settings.fileType,
-          project: this.project.name,
+          subDirectories: ['still', this.project.name],
         });
       }
     } catch (e: any) {
@@ -233,6 +233,7 @@ export class Renderer {
     await this.exporter.handleFrame(
       this.stage.finalBuffer,
       this.playback.frame,
+      this.playback.currentScene.name,
       signal,
     );
   }

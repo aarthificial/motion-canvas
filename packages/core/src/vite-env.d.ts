@@ -7,11 +7,10 @@ declare module 'vite/types/customEvent' {
     'motion-canvas:meta': {source: string; data: any};
     'motion-canvas:meta-ack': {source: string};
     'motion-canvas:export': {
-      frame: number;
       data: string;
+      subDirectories: string[];
       mimeType: string;
-      project: string;
-      isStill: boolean;
+      frameNumber: number;
     };
     'motion-canvas:export-ack': {frame: number};
     'motion-canvas:assets': {urls: string[]};
