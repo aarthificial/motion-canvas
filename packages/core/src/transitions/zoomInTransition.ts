@@ -40,7 +40,7 @@ export function* zoomInTransition(area: BBox, duration = 0.6): ThreadGenerator {
     previousPosition(area.position.flipped.mul(scale), duration, timing),
     currentScale(1, duration, timing),
     previousScale(scale, duration, timing),
-    alpha(1, duration, linear),
+    alpha(1, duration, v => linear(v * v)),
   );
 
   endTransition();

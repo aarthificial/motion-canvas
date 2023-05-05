@@ -45,7 +45,7 @@ export function* zoomOutTransition(
     previousPosition(area.position, duration, timing),
     currentScale(1, duration, timing),
     previousScale(Vector2.one.div(scale), duration, timing),
-    alpha(1, duration, linear),
+    alpha(1, duration, v => linear(Math.sqrt(v))),
   );
 
   endTransition();
