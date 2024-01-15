@@ -1,8 +1,0 @@
-{
-  "extends": "@motion-canvas/2d/tsconfig.project.json",
-  "compilerOptions": {
-    "baseUrl": "src",
-    "types": ["node", "dom-webcodecs"]
-  },
-  "include": ["src"]
-}
