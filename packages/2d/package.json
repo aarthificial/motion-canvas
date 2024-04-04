@@ -43,6 +43,7 @@
     "@motion-canvas/core": "^3.15.2",
     "code-fns": "^0.8.2",
     "mathjax-full": "^3.2.2",
-    "parse-svg-path": "^0.1.2"
+    "parse-svg-path": "^0.1.2",
+    "yoga-layout": "^3.0.2"
   }
 }

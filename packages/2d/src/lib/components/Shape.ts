@@ -70,7 +70,17 @@ export abstract class Shape extends Layout {
 
   protected applyText(context: CanvasRenderingContext2D) {
     context.direction = this.textDirection();
-    this.element.dir = this.textDirection();
+    const family = this.fontFamily();
+    const size = this.fontSize();
+    const style = this.fontStyle();
+    const lineHeight = this.resolveLineHeight();
+    const weight = this.fontWeight() ?? 'normal';
+    context.textAlign = this.textAlign();
+    context.font = `${style} ${weight} ${size}px/${lineHeight} ${family}`;
+    if ('letterSpacing' in context) {
+      context.letterSpacing = `${this.letterSpacing()}px`;
+    }
+    context.canvas.dir = this.textDirection();
   }
 
   protected applyStyle(context: CanvasRenderingContext2D) {

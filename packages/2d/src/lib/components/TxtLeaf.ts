@@ -3,9 +3,11 @@ import {
   SignalValue,
   SimpleSignal,
   capitalize,
+  getContext,
   lazy,
   textLerp,
 } from '@motion-canvas/core';
+import Yoga from 'yoga-layout';
 import {
   computed,
   initial,
@@ -15,7 +17,6 @@ import {
 } from '../decorators';
 import {Shape, ShapeProps} from './Shape';
 import {Txt} from './Txt';
-import {View2D} from './View2D';
 
 export interface TxtLeafProps extends ShapeProps {
   children?: string;
@@ -24,13 +25,6 @@ export interface TxtLeafProps extends ShapeProps {
 
 @nodeName('TxtLeaf')
 export class TxtLeaf extends Shape {
-  @lazy(() => {
-    const formatter = document.createElement('span');
-    View2D.shadowRoot.append(formatter);
-    return formatter;
-  })
-  protected static formatter: HTMLDivElement;
-
   @lazy(() => {
     try {
       return new (Intl as any).Segmenter(undefined, {
@@ -64,41 +58,36 @@ export class TxtLeaf extends Shape {
     this.requestFontUpdate();
     this.applyStyle(context);
     this.applyText(context);
-    context.font = this.styles.font;
-    if ('letterSpacing' in context) {
-      context.letterSpacing = `${this.letterSpacing()}px`;
-    }
 
-    const parentRect = this.element.getBoundingClientRect();
     const {width, height} = this.size();
-    const range = document.createRange();
-    let line = '';
+    context.translate(-width / 2, -height / 2);
+
+    const lineHeight = this.resolveLineHeight();
     const lineRect = new BBox();
-    for (const childNode of this.element.childNodes) {
-      if (!childNode.textContent) {
-        continue;
+    lineRect.height = lineHeight;
+
+    let content = '';
+    for (const textNode of this.textNodes) {
+      if (lineRect.x + lineRect.width + textNode.measure.width > width) {
+        lineRect.x = 0;
+        lineRect.y += lineHeight;
       }
 
-      range.selectNodeContents(childNode);
-      const rangeRect = range.getBoundingClientRect();
+      lineRect.width += textNode.measure.width;
 
-      const x = width / -2 + rangeRect.left - parentRect.left;
-      const y = height / -2 + rangeRect.top - parentRect.top;
-
-      if (lineRect.y === y) {
-        lineRect.width += rangeRect.width;
-        line += childNode.textContent;
+      if (textNode.content === ' ') {
+        this.drawText(context, content, lineRect);
+        content = '';
+        lineRect.x += lineRect.width;
+        lineRect.width = 0;
       } else {
-        this.drawText(context, line, lineRect);
-        lineRect.x = x;
-        lineRect.y = y;
-        lineRect.width = rangeRect.width;
-        lineRect.height = rangeRect.height;
-        line = childNode.textContent;
+        content += textNode.content;
       }
     }
 
-    this.drawText(context, line, lineRect);
+    if (content) {
+      this.drawText(context, content, lineRect);
+    }
   }
 
   protected drawText(
@@ -127,7 +116,7 @@ export class TxtLeaf extends Shape {
   protected override getCacheBBox(): BBox {
     const size = this.computedSize();
     const range = document.createRange();
-    range.selectNodeContents(this.element);
+    // range.selectNodeContents(this.element);
     const bbox = range.getBoundingClientRect();
 
     const lineWidth = this.lineWidth();
@@ -141,43 +130,136 @@ export class TxtLeaf extends Shape {
 
   protected override applyFlex() {
     super.applyFlex();
-    this.element.style.display = 'inline';
+    // this.element.style.display = 'inline';
   }
+
+  private textNodes: {
+    content: string;
+    measure: TextMetrics;
+  }[] = [];
+
+  private static readonly measureContext = getContext();
 
   protected override updateLayout() {
     this.applyFont();
     this.applyFlex();
 
-    // Make sure the text is aligned correctly even if the text is smaller than
-    // the container.
-    if (this.justifyContent.isInitial()) {
-      this.element.style.justifyContent =
-        this.styles.getPropertyValue('text-align');
-    }
+    TxtLeaf.measureContext.save();
+    this.applyText(TxtLeaf.measureContext);
+    this.textNodes = [];
 
-    const wrap =
-      this.styles.whiteSpace !== 'nowrap' && this.styles.whiteSpace !== 'pre';
-
-    if (wrap) {
-      this.element.innerText = '';
-
-      if (TxtLeaf.segmenter) {
-        for (const word of TxtLeaf.segmenter.segment(this.text())) {
-          this.element.appendChild(document.createTextNode(word.segment));
-        }
-      } else {
-        for (const word of this.text().split('')) {
-          this.element.appendChild(document.createTextNode(word));
-        }
-      }
-    } else if (this.styles.whiteSpace === 'pre') {
-      this.element.innerText = '';
-      for (const line of this.text().split('\n')) {
-        this.element.appendChild(document.createTextNode(line + '\n'));
+    if (TxtLeaf.segmenter) {
+      for (const word of TxtLeaf.segmenter.segment(this.text())) {
+        this.textNodes.push({
+          content: word.segment,
+          measure: TxtLeaf.measureContext.measureText(word.segment),
+        });
       }
     } else {
-      this.element.innerText = this.text();
+      for (const word of this.text().split('')) {
+        this.textNodes.push({
+          content: word,
+          measure: TxtLeaf.measureContext.measureText(word),
+        });
+      }
     }
+
+    TxtLeaf.measureContext.restore();
+    const desiredLines = (maxWidth: number) => {
+      let x = 0;
+      let width = 0;
+      let lines = 1;
+
+      for (const textNode of this.textNodes) {
+        if (x + width + textNode.measure.width > maxWidth) {
+          x = 0;
+          lines++;
+        }
+
+        width += textNode.measure.width;
+
+        if (textNode.content === ' ') {
+          x += width;
+          width = 0;
+        }
+      }
+
+      return lines;
+    };
+
+    this.yoga.setMeasureFunc(
+      (availableWidth, widthMode, availableHeight, heightMode) => {
+        let width = 0;
+        let checkHeight = false;
+        if (widthMode === Yoga.MEASURE_MODE_UNDEFINED) {
+          for (const textNode of this.textNodes) {
+            width += textNode.measure.width;
+          }
+        } else if (widthMode === Yoga.MEASURE_MODE_EXACTLY) {
+          width = availableWidth;
+          checkHeight = true;
+        } else {
+          let desiredWidth = 0;
+          for (const textNode of this.textNodes) {
+            desiredWidth += textNode.measure.width;
+          }
+
+          if (desiredWidth <= availableWidth) {
+            width = desiredWidth;
+          } else {
+            width = availableWidth;
+            checkHeight = true;
+          }
+        }
+
+        let height;
+        if (heightMode === Yoga.MEASURE_MODE_UNDEFINED) {
+          const lines = checkHeight ? desiredLines(width) : 1;
+          height = this.resolveLineHeight() * lines;
+        } else if (heightMode === Yoga.MEASURE_MODE_EXACTLY) {
+          height = availableHeight;
+        } else {
+          const lines = checkHeight ? desiredLines(width) : 1;
+          height = Math.min(availableHeight, this.resolveLineHeight() * lines);
+        }
+
+        return {
+          width,
+          height,
+        };
+      },
+    );
+
+    // Make sure the text is aligned correctly even if the text is smaller than
+    // the container.
+    // if (this.justifyContent.isInitial()) {
+    //   this.element.style.justifyContent =
+    //     this.styles.getPropertyValue('text-align');
+    // }
+
+    // const wrap =
+    //   this.styles.whiteSpace !== 'nowrap' && this.styles.whiteSpace !== 'pre';
+
+    // if (wrap) {
+    //   this.element.innerText = '';
+    //
+    //   if (TxtLeaf.segmenter) {
+    //     for (const word of TxtLeaf.segmenter.segment(this.text())) {
+    //       this.element.appendChild(document.createTextNode(word.segment));
+    //     }
+    //   } else {
+    //     for (const word of this.text().split('')) {
+    //       this.element.appendChild(document.createTextNode(word));
+    //     }
+    //   }
+    // } else if (this.styles.whiteSpace === 'pre') {
+    //   this.element.innerText = '';
+    //   for (const line of this.text().split('\n')) {
+    //     this.element.appendChild(document.createTextNode(line + '\n'));
+    //   }
+    // } else {
+    //   this.element.innerText = this.text();
+    // }
   }
 }
 

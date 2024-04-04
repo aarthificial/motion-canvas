@@ -33,7 +33,18 @@ export default defineConfig({
       buildForEditor: true,
     }),
   ],
+  esbuild: {
+    supported: {
+      'top-level-await': true, //browsers can handle top-level-await features
+    },
+  },
+  optimizeDeps: {
+    esbuildOptions: {
+      target: 'esnext',
+    },
+  },
   build: {
+    target: 'esnext',
     minify: false,
     rollupOptions: {
       output: {

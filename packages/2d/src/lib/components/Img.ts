@@ -246,9 +246,10 @@ about working with images.`,
   protected override applyFlex() {
     super.applyFlex();
     const image = this.image();
-    this.element.style.aspectRatio = (
-      this.ratio() ?? image.naturalWidth / image.naturalHeight
-    ).toString();
+    const size = this.desiredSize();
+    if (!this.ratio() && size.y === null && size.x === null) {
+      this.yoga.setAspectRatio(image.naturalWidth / image.naturalHeight);
+    }
   }
 
   /**

@@ -29,7 +29,6 @@ import {Node, NodeProps} from './Node';
 import {Path, PathProps} from './Path';
 import {Rect, RectProps} from './Rect';
 import {Shape, ShapeProps} from './Shape';
-import {View2D} from './View2D';
 
 /**
  * Represent SVG shape.
@@ -84,7 +83,7 @@ If you're not interested in animating SVG, you can use {@link Img} instead.
 export class SVG extends Shape {
   @lazy(() => {
     const element = document.createElement('div');
-    View2D.shadowRoot.appendChild(element);
+    // View2D.shadowRoot.appendChild(element);
     return element;
   })
   protected static containerElement: HTMLDivElement;

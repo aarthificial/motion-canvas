@@ -1,5 +1,4 @@
 import {BBox, DEG2RAD, Matrix2D, Vector2, lazy} from '@motion-canvas/core';
-import {View2D} from '../components/View2D';
 import {CurvePoint} from './CurvePoint';
 import {Segment} from './Segment';
 
@@ -8,7 +7,7 @@ export class ArcSegment extends Segment {
     const root = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
     const el = document.createElementNS('http://www.w3.org/2000/svg', 'path');
     root.appendChild(el);
-    View2D.shadowRoot.appendChild(root);
+    // View2D.shadowRoot.appendChild(root);
     return el;
   })
   private static el: SVGPathElement;

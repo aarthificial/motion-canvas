@@ -121,6 +121,7 @@ export class Video extends Rect {
     if (play) {
       this.play();
     }
+    this.video().muted = true;
   }
 
   public isPlaying(): boolean {
@@ -263,9 +264,9 @@ export class Video extends Rect {
   protected override applyFlex() {
     super.applyFlex();
     const video = this.video();
-    this.element.style.aspectRatio = (
-      this.ratio() ?? video.videoWidth / video.videoHeight
-    ).toString();
+    this.yoga.setAspectRatio(
+      this.ratio() ?? video.videoWidth / video.videoHeight,
+    );
   }
 
   protected setCurrentTime(value: number) {
@@ -275,9 +276,11 @@ export class Video extends Rect {
     video.currentTime = value;
     this.lastTime = value;
     if (video.seeking) {
+      console.time('seek');
       DependencyContext.collectPromise(
         new Promise<void>(resolve => {
           const listener = () => {
+            console.timeEnd('seek');
             resolve();
             video.removeEventListener('seeked', listener);
           };

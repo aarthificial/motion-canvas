@@ -161,11 +161,11 @@ export class CodeBlock extends Shape {
     const context = this.cacheCanvas();
     context.save();
     this.applyStyle(context);
-    context.font = this.styles.font;
+    // context.font = this.styles.font;
     const width = context.measureText('X').width;
     context.restore();
 
-    return new Vector2(width, parseFloat(this.styles.lineHeight));
+    return new Vector2(width, 20);
   }
 
   protected override desiredSize(): SerializedVector2<DesiredLength> {

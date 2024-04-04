@@ -21,6 +21,7 @@ import {
   Vector2,
   Vector2Signal,
 } from '@motion-canvas/core';
+import Yoga, {PositionType, Node as YogaNode} from 'yoga-layout';
 import {
   addInitializer,
   cloneable,
@@ -664,8 +665,7 @@ export class Layout extends Node {
   @signal()
   public declare readonly clip: SimpleSignal<boolean, this>;
 
-  public declare element: HTMLElement;
-  public declare styles: CSSStyleDeclaration;
+  public declare yoga: YogaNode;
 
   @initial(0)
   @signal()
@@ -673,7 +673,6 @@ export class Layout extends Node {
 
   public constructor(props: LayoutProps) {
     super(props);
-    this.element.dataset.motionCanvasKey = this.key;
   }
 
   public lockSize() {
@@ -750,7 +749,9 @@ export class Layout extends Node {
   }
 
   protected getComputedLayout(): BBox {
-    return new BBox(this.element.getBoundingClientRect());
+    this.yoga.isReferenceBaseline();
+    const layout = this.yoga.getComputedLayout();
+    return new BBox(layout.left, layout.top, layout.width, layout.height);
   }
 
   @computed()
@@ -758,16 +759,15 @@ export class Layout extends Node {
     this.requestLayoutUpdate();
     const box = this.getComputedLayout();
 
-    const position = new Vector2(
-      box.x + (box.width / 2) * this.offset.x(),
-      box.y + (box.height / 2) * this.offset.y(),
-    );
+    const position = new Vector2(box.x, box.y);
+    position.x += (box.width / 2) * (1 + this.offset.x());
+    position.y += (box.height / 2) * (1 + this.offset.y());
 
     const parent = this.parentTransform();
     if (parent) {
       const parentRect = parent.getComputedLayout();
-      position.x -= parentRect.x + (parentRect.width - box.width) / 2;
-      position.y -= parentRect.y + (parentRect.height - box.height) / 2;
+      position.x -= parentRect.width / 2;
+      position.y -= parentRect.height / 2;
     }
 
     return position;
@@ -788,6 +788,8 @@ export class Layout extends Node {
     if (this.appendedToView()) {
       parent?.requestFontUpdate();
       this.updateLayout();
+      const size = this.desiredSize();
+      this.yoga.calculateLayout(size.x ?? undefined, size.y ?? undefined);
     } else {
       parent!.requestLayoutUpdate();
     }
@@ -797,7 +799,7 @@ export class Layout extends Node {
   protected appendedToView() {
     const root = this.isLayoutRoot();
     if (root) {
-      this.view().element.append(this.element);
+      this.yoga.getParent()?.removeChild(this.yoga);
     }
 
     return root;
@@ -822,19 +824,27 @@ export class Layout extends Node {
   protected layoutChildren(): Layout[] {
     const queue = [...this.children()];
     const result: Layout[] = [];
-    const elements: HTMLElement[] = [];
+    const elements: YogaNode[] = [];
     while (queue.length) {
       const child = queue.shift();
       if (child instanceof Layout) {
         if (child.layoutEnabled()) {
           result.push(child);
-          elements.push(child.element);
+          child.yoga.getParent()?.removeChild(child.yoga);
+          elements.push(child.yoga);
         }
       } else if (child) {
         queue.unshift(...child.children());
       }
     }
-    this.element.replaceChildren(...elements);
+
+    const count = this.yoga.getChildCount();
+    for (let i = 0; i < count; i++) {
+      this.yoga.removeChild(this.yoga.getChild(0));
+    }
+    for (let i = 0; i < elements.length; i++) {
+      this.yoga.insertChild(elements[i], i);
+    }
 
     return result;
   }
@@ -949,100 +959,170 @@ export class Layout extends Node {
 
   @computed()
   protected applyFlex() {
-    this.element.style.position = this.isLayoutRoot() ? 'absolute' : 'relative';
+    this.yoga.setPositionType(
+      this.isLayoutRoot() ? PositionType.Absolute : PositionType.Relative,
+    );
 
     const size = this.desiredSize();
-    this.element.style.width = this.parseLength(size.x);
-    this.element.style.height = this.parseLength(size.y);
-    this.element.style.maxWidth = this.parseLength(this.maxWidth());
-    this.element.style.minWidth = this.parseLength(this.minWidth());
-    this.element.style.maxHeight = this.parseLength(this.maxHeight());
-    this.element.style.minHeight = this.parseLength(this.minHeight()!);
-    this.element.style.aspectRatio =
-      this.ratio() === null ? '' : this.ratio()!.toString();
+    this.yoga.setWidth(size.x ?? undefined);
+    this.yoga.setHeight(size.y ?? undefined);
+    this.yoga.setMinWidth(this.minWidth() ?? undefined);
+    this.yoga.setMaxWidth(this.maxWidth() ?? undefined);
+    this.yoga.setMinHeight(this.minHeight() ?? undefined);
+    this.yoga.setMaxHeight(this.maxHeight() ?? undefined);
+    this.yoga.setAspectRatio(this.ratio() ?? undefined);
 
-    this.element.style.marginTop = this.parsePixels(this.margin.top());
-    this.element.style.marginBottom = this.parsePixels(this.margin.bottom());
-    this.element.style.marginLeft = this.parsePixels(this.margin.left());
-    this.element.style.marginRight = this.parsePixels(this.margin.right());
+    this.yoga.setMargin(Yoga.EDGE_TOP, this.margin.top());
+    this.yoga.setMargin(Yoga.EDGE_BOTTOM, this.margin.bottom());
+    this.yoga.setMargin(Yoga.EDGE_LEFT, this.margin.left());
+    this.yoga.setMargin(Yoga.EDGE_RIGHT, this.margin.right());
 
-    this.element.style.paddingTop = this.parsePixels(this.padding.top());
-    this.element.style.paddingBottom = this.parsePixels(this.padding.bottom());
-    this.element.style.paddingLeft = this.parsePixels(this.padding.left());
-    this.element.style.paddingRight = this.parsePixels(this.padding.right());
+    this.yoga.setPadding(Yoga.EDGE_TOP, this.padding.top());
+    this.yoga.setPadding(Yoga.EDGE_BOTTOM, this.padding.bottom());
+    this.yoga.setPadding(Yoga.EDGE_LEFT, this.padding.left());
+    this.yoga.setPadding(Yoga.EDGE_RIGHT, this.padding.right());
 
-    this.element.style.flexDirection = this.direction();
-    this.element.style.flexBasis = this.parseLength(this.basis()!);
-    this.element.style.flexWrap = this.wrap();
+    switch (this.direction()) {
+      case 'row':
+        this.yoga.setFlexDirection(Yoga.FLEX_DIRECTION_ROW);
+        break;
+      case 'row-reverse':
+        this.yoga.setFlexDirection(Yoga.FLEX_DIRECTION_ROW_REVERSE);
+        break;
+      case 'column':
+        this.yoga.setFlexDirection(Yoga.FLEX_DIRECTION_COLUMN);
+        break;
+      case 'column-reverse':
+        this.yoga.setFlexDirection(Yoga.FLEX_DIRECTION_COLUMN_REVERSE);
+        break;
+    }
+    this.yoga.setAspectRatio(this.ratio() ?? undefined);
+    this.yoga.setFlexBasis(this.basis() ?? undefined);
 
-    this.element.style.justifyContent = this.justifyContent();
-    this.element.style.alignContent = this.alignContent();
-    this.element.style.alignItems = this.alignItems();
-    this.element.style.alignSelf = this.alignSelf();
-    this.element.style.columnGap = this.parseLength(this.gap.x());
-    this.element.style.rowGap = this.parseLength(this.gap.y());
+    switch (this.wrap()) {
+      case 'nowrap':
+        this.yoga.setFlexWrap(Yoga.WRAP_NO_WRAP);
+        break;
+      case 'wrap':
+        this.yoga.setFlexWrap(Yoga.WRAP_WRAP);
+        break;
+      case 'wrap-reverse':
+        this.yoga.setFlexWrap(Yoga.WRAP_WRAP_REVERSE);
+        break;
+    }
+
+    switch (this.justifyContent()) {
+      case 'center':
+        this.yoga.setJustifyContent(Yoga.JUSTIFY_CENTER);
+        break;
+      case 'start':
+        this.yoga.setJustifyContent(Yoga.JUSTIFY_FLEX_START);
+        break;
+      case 'end':
+        this.yoga.setJustifyContent(Yoga.JUSTIFY_FLEX_END);
+        break;
+      case 'space-between':
+        this.yoga.setJustifyContent(Yoga.JUSTIFY_SPACE_BETWEEN);
+        break;
+      case 'space-around':
+        this.yoga.setJustifyContent(Yoga.JUSTIFY_SPACE_AROUND);
+        break;
+      case 'space-evenly':
+        this.yoga.setJustifyContent(Yoga.JUSTIFY_SPACE_EVENLY);
+        break;
+    }
+
+    switch (this.alignContent()) {
+      case 'center':
+        this.yoga.setAlignContent(Yoga.ALIGN_CENTER);
+        break;
+      case 'start':
+        this.yoga.setAlignContent(Yoga.ALIGN_FLEX_START);
+        break;
+      case 'end':
+        this.yoga.setAlignContent(Yoga.ALIGN_FLEX_END);
+        break;
+      case 'space-between':
+        this.yoga.setAlignContent(Yoga.ALIGN_SPACE_BETWEEN);
+        break;
+      case 'space-around':
+        this.yoga.setAlignContent(Yoga.ALIGN_SPACE_AROUND);
+        break;
+      case 'space-evenly':
+        this.yoga.setAlignContent(Yoga.ALIGN_SPACE_EVENLY);
+        break;
+      case 'stretch':
+        this.yoga.setAlignContent(Yoga.ALIGN_STRETCH);
+        break;
+    }
+
+    switch (this.alignItems()) {
+      case 'center':
+        this.yoga.setAlignItems(Yoga.ALIGN_CENTER);
+        break;
+      case 'start':
+        this.yoga.setAlignItems(Yoga.ALIGN_FLEX_START);
+        break;
+      case 'end':
+        this.yoga.setAlignItems(Yoga.ALIGN_FLEX_END);
+        break;
+      case 'stretch':
+        this.yoga.setAlignItems(Yoga.ALIGN_STRETCH);
+        break;
+      case 'baseline':
+        this.yoga.setAlignItems(Yoga.ALIGN_BASELINE);
+        break;
+    }
+
+    switch (this.alignSelf()) {
+      case 'center':
+        this.yoga.setAlignSelf(Yoga.ALIGN_CENTER);
+        break;
+      case 'start':
+        this.yoga.setAlignSelf(Yoga.ALIGN_FLEX_START);
+        break;
+      case 'end':
+        this.yoga.setAlignSelf(Yoga.ALIGN_FLEX_END);
+        break;
+      case 'stretch':
+        this.yoga.setAlignSelf(Yoga.ALIGN_STRETCH);
+        break;
+      case 'baseline':
+        this.yoga.setAlignSelf(Yoga.ALIGN_BASELINE);
+        break;
+    }
+
+    this.yoga.setGap(Yoga.GUTTER_COLUMN, this.gap().x);
+    this.yoga.setGap(Yoga.GUTTER_ROW, this.gap().y);
 
     if (this.sizeLockCounter() > 0) {
-      this.element.style.flexGrow = '0';
-      this.element.style.flexShrink = '0';
+      this.yoga.setFlexGrow(0);
+      this.yoga.setFlexShrink(0);
     } else {
-      this.element.style.flexGrow = this.grow().toString();
-      this.element.style.flexShrink = this.shrink().toString();
+      this.yoga.setFlexGrow(this.grow());
+      this.yoga.setFlexShrink(this.shrink());
     }
+  }
+
+  protected resolveLineHeight(): number {
+    const lineHeight = this.lineHeight();
+    if (typeof lineHeight === 'number') {
+      return lineHeight;
+    }
+
+    return (this.fontSize() * parseFloat(lineHeight as string)) / 100;
   }
 
   @computed()
-  protected applyFont() {
-    this.element.style.fontFamily = this.fontFamily.isInitial()
-      ? ''
-      : this.fontFamily();
-    this.element.style.fontSize = this.fontSize.isInitial()
-      ? ''
-      : `${this.fontSize()}px`;
-    this.element.style.fontStyle = this.fontStyle.isInitial()
-      ? ''
-      : this.fontStyle();
-    if (this.lineHeight.isInitial()) {
-      this.element.style.lineHeight = '';
-    } else {
-      const lineHeight = this.lineHeight();
-      this.element.style.lineHeight =
-        typeof lineHeight === 'string'
-          ? (parseFloat(lineHeight as string) / 100).toString()
-          : `${lineHeight}px`;
-    }
-    this.element.style.fontWeight = this.fontWeight.isInitial()
-      ? ''
-      : this.fontWeight().toString();
-    this.element.style.letterSpacing = this.letterSpacing.isInitial()
-      ? ''
-      : `${this.letterSpacing()}px`;
-
-    this.element.style.textAlign = this.textAlign.isInitial()
-      ? ''
-      : this.textAlign();
-
-    if (this.textWrap.isInitial()) {
-      this.element.style.whiteSpace = '';
-    } else {
-      const wrap = this.textWrap();
-      if (typeof wrap === 'boolean') {
-        this.element.style.whiteSpace = wrap ? 'normal' : 'nowrap';
-      } else {
-        this.element.style.whiteSpace = wrap;
-      }
-    }
-  }
+  protected applyFont() {}
 
   public override dispose() {
     super.dispose();
     this.sizeLockCounter?.context.dispose();
-    if (this.element) {
-      this.element.remove();
-      this.element.innerHTML = '';
+    if (this.yoga) {
+      this.yoga.freeRecursive();
     }
-    this.element = null as unknown as HTMLElement;
-    this.styles = null as unknown as CSSStyleDeclaration;
+    this.yoga = null as unknown as YogaNode;
   }
 
   public override hit(position: Vector2): Node | null {
@@ -1083,8 +1163,5 @@ function originSignal(origin: Origin): PropertyDecorator {
 }
 
 addInitializer<Layout>(Layout.prototype, instance => {
-  instance.element = document.createElement('div');
-  instance.element.style.display = 'flex';
-  instance.element.style.boxSizing = 'border-box';
-  instance.styles = getComputedStyle(instance.element);
+  instance.yoga = Yoga.Node.create();
 });
