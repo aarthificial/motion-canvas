@@ -4,9 +4,12 @@ import {
   createRef,
   easeInExpo,
   easeInOutExpo,
+  sound,
   waitFor,
-  waitUntil,
 } from '@motion-canvas/core';
+import bookAudio from '../audio/book.wav';
+
+const book = sound(bookAudio).trim(1.1, 3);
 
 export default makeScene2D(function* (view) {
   const rect = createRef<Rect>();
@@ -15,9 +18,14 @@ export default makeScene2D(function* (view) {
     <Rect ref={rect} size={320} radius={80} smoothCorners fill={'#f3303f'} />,
   );
 
-  yield* waitUntil('rect');
-  yield* rect().scale(2, 1, easeInOutExpo).to(1, 0.6, easeInExpo);
-  rect().fill('#ffa56d');
-  yield* all(rect().ripple(1));
   yield* waitFor(0.3);
+  yield* all(
+    rect().rotation(90, 1, easeInOutExpo),
+    rect().scale(2, 1, easeInOutExpo),
+  );
+  yield* rect().scale(1, 0.6, easeInExpo);
+  rect().fill('#ffa56d');
+  book.play();
+  yield* all(rect().ripple(1), rect().fill('#f3303f', 1));
+  yield* waitFor(2);
 });

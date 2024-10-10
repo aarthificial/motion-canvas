@@ -182,6 +182,8 @@ export class FFmpegExporterServer {
     if (!fs.existsSync(this.config.output)) {
       await fs.promises.mkdir(this.config.output, {recursive: true});
     }
+    this.command.on('start', console.log);
+    this.command.on('stderr', console.log);
     this.command.run();
   }
 
